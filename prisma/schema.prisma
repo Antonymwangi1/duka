@@ -1,0 +1,410 @@
+// =============================================================================
+// DUKA MANAGER — Prisma Schema
+// Stack: PostgreSQL + Prisma ORM
+// MVP: Inventory, POS, Reports, Profit Tracking
+// V2:  Customer Credit, Prepay (Milk Accounts), Deliveries, Suppliers
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum Plan {
+  FREE
+  BASIC   // 500 KES/month
+  PRO     // 1,500 KES/month
+}
+
+enum ShopRole {
+  OWNER
+  MANAGER
+  CASHIER
+}
+
+enum SaleStatus {
+  COMPLETED
+  REFUNDED
+  VOIDED
+}
+
+enum PaymentMethod {
+  CASH
+  MPESA
+  CARD
+  CREDIT   // V2: customer credit
+  PREPAY   // V2: customer prepay balance
+}
+
+enum StockMovementReason {
+  SALE
+  RESTOCK
+  ADJUSTMENT     // manual correction
+  DAMAGE
+  RETURN         // customer return
+  OPENING_STOCK  // initial stock entry
+}
+
+// V2
+enum DeliveryStatus {
+  PENDING
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+// V2
+enum CreditTransactionType {
+  CREDIT_EXTENDED   // shop gives credit
+  CREDIT_REPAID     // customer pays back
+  PREPAY_TOPUP      // customer tops up prepay balance
+  PREPAY_USED       // prepay deducted at sale
+}
+
+// =============================================================================
+// MULTI-TENANCY — Shop is the root tenant
+// =============================================================================
+
+model Shop {
+  id           String   @id @default(cuid())
+  name         String
+  location     String?
+  phone        String?
+  currency     String   @default("KES")
+  plan         Plan     @default(FREE)
+  planExpiresAt DateTime?
+
+  // Low stock alert threshold (global default; overridable per product)
+  defaultLowStockThreshold Int @default(5)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  users        ShopUser[]
+  categories   Category[]
+  products     Product[]
+  sales        Sale[]
+  stockMovements StockMovement[]
+  reports      Report[]
+  customers    Customer[]      // V2
+  suppliers    Supplier[]      // V2
+  deliveries   Delivery[]      // V2
+}
+
+// =============================================================================
+// AUTH & USERS
+// =============================================================================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  phone        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shops        ShopUser[]
+  sales        Sale[]
+  stockMovements StockMovement[]
+  deliveries   Delivery[]     // V2
+}
+
+// Junction: a user can belong to multiple shops (owner runs multiple branches)
+model ShopUser {
+  id     String   @id @default(cuid())
+  shop   Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  role   ShopRole @default(CASHIER)
+
+  joinedAt DateTime @default(now())
+
+  @@unique([shopId, userId])
+  @@index([shopId])
+  @@index([userId])
+}
+
+// =============================================================================
+// INVENTORY
+// =============================================================================
+
+model Category {
+  id     String @id @default(cuid())
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId String
+  name   String
+  color  String? // hex color for UI labels
+
+  products Product[]
+
+  @@unique([shopId, name])
+  @@index([shopId])
+}
+
+model Product {
+  id          String    @id @default(cuid())
+  shop        Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId      String
+  category    Category? @relation(fields: [categoryId], references: [id])
+  categoryId  String?
+
+  name         String
+  sku          String?   // barcode or manual SKU
+  unit         String    @default("pcs")  // pcs, kg, litre, box, etc.
+  buyingPrice  Decimal   @db.Decimal(12, 2)
+  sellingPrice Decimal   @db.Decimal(12, 2)
+  stockQty     Decimal   @db.Decimal(12, 3) // decimal for weight-based items
+
+  // Low stock alert: use this if set, else fall back to shop.defaultLowStockThreshold
+  lowStockThreshold Int?
+  isActive      Boolean  @default(true)
+  imageUrl      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  saleItems      SaleItem[]
+  stockMovements StockMovement[]
+  deliveryItems  DeliveryItem[]  // V2
+
+  @@unique([shopId, sku])
+  @@index([shopId])
+  @@index([shopId, isActive])
+  @@index([shopId, categoryId])
+}
+
+// Every stock change is recorded here — stock is derived, not stored raw
+// (stockQty on Product is a denormalized cache for fast reads; source of truth is movements)
+model StockMovement {
+  id        String              @id @default(cuid())
+  shop      Shop                @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId    String
+  product   Product             @relation(fields: [productId], references: [id])
+  productId String
+  user      User?               @relation(fields: [userId], references: [id])
+  userId    String?
+
+  // Positive = stock in, Negative = stock out
+  quantityChange Decimal  @db.Decimal(12, 3)
+  reason         StockMovementReason
+  note           String?
+
+  // Links to the sale that caused this movement (if reason = SALE)
+  sale           Sale?    @relation(fields: [saleId], references: [id])
+  saleId         String?
+
+  // V2: Links to the delivery that caused this movement (if reason = RESTOCK)
+  delivery       Delivery? @relation(fields: [deliveryId], references: [id])
+  deliveryId     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([shopId, productId])
+  @@index([shopId, createdAt])
+  @@index([saleId])
+}
+
+// =============================================================================
+// POINT OF SALE
+// =============================================================================
+
+model Sale {
+  id     String @id @default(cuid())
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId String
+  user   User   @relation(fields: [userId], references: [id]) // cashier
+  userId String
+
+  // V2: optional customer link
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  customerId String?
+
+  receiptNumber String     // e.g. DK-20240601-0042
+  status        SaleStatus @default(COMPLETED)
+  paymentMethod PaymentMethod @default(CASH)
+  mpesaRef      String?    // M-Pesa transaction ref
+
+  subtotal   Decimal @db.Decimal(12, 2)  // before discount
+  discount   Decimal @db.Decimal(12, 2) @default(0)
+  total      Decimal @db.Decimal(12, 2)  // what was charged
+  amountPaid Decimal @db.Decimal(12, 2)  // cash tendered
+  change     Decimal @db.Decimal(12, 2) @default(0)
+
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items          SaleItem[]
+  stockMovements StockMovement[]
+
+  @@index([shopId, createdAt])
+  @@index([shopId, status])
+  @@index([customerId])
+}
+
+model SaleItem {
+  id      String  @id @default(cuid())
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  saleId  String
+  product Product @relation(fields: [productId], references: [id])
+  productId String
+
+  // Snapshot prices at time of sale (product prices can change later)
+  quantity     Decimal @db.Decimal(12, 3)
+  buyingPrice  Decimal @db.Decimal(12, 2)  // for profit calculation
+  sellingPrice Decimal @db.Decimal(12, 2)
+  lineTotal    Decimal @db.Decimal(12, 2)  // quantity * sellingPrice
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+// =============================================================================
+// REPORTS (pre-aggregated summaries for fast dashboard loads)
+// Generated by a background job or on-demand
+// =============================================================================
+
+model Report {
+  id     String @id @default(cuid())
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId String
+
+  period     String // "2024-06-01" (daily), "2024-W22" (weekly), "2024-06" (monthly)
+  periodType String // "daily" | "weekly" | "monthly"
+
+  totalSales       Decimal @db.Decimal(14, 2)
+  totalRevenue     Decimal @db.Decimal(14, 2)
+  totalCOGS        Decimal @db.Decimal(14, 2) // cost of goods sold
+  grossProfit      Decimal @db.Decimal(14, 2)
+  totalDiscount    Decimal @db.Decimal(14, 2)
+  totalTransactions Int
+  topProductsJson  Json?  // [{productId, name, qty, revenue}]
+
+  generatedAt DateTime @default(now())
+
+  @@unique([shopId, period, periodType])
+  @@index([shopId, periodType, period])
+}
+
+// =============================================================================
+// V2 — CUSTOMERS
+// =============================================================================
+
+model Customer {
+  id     String @id @default(cuid())
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId String
+
+  name    String
+  phone   String?
+  note    String?
+
+  // Credit: how much the customer owes the shop (positive = owes)
+  creditBalance Decimal @db.Decimal(12, 2) @default(0)
+
+  // Prepay: milk-account style — customer pre-pays and balance is deducted per sale
+  prepayBalance Decimal @db.Decimal(12, 2) @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sales              Sale[]
+  creditTransactions CreditTransaction[]
+  deliveries         Delivery[]
+
+  @@index([shopId])
+  @@index([shopId, phone])
+}
+
+// Full ledger of every credit/prepay movement per customer
+model CreditTransaction {
+  id         String               @id @default(cuid())
+  customer   Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId String
+  type       CreditTransactionType
+  amount     Decimal              @db.Decimal(12, 2)
+  note       String?
+  createdAt  DateTime             @default(now())
+
+  @@index([customerId, createdAt])
+}
+
+// =============================================================================
+// V2 — SUPPLIERS
+// =============================================================================
+
+model Supplier {
+  id     String @id @default(cuid())
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId String
+
+  name    String
+  phone   String?
+  email   String?
+  address String?
+  note    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deliveries Delivery[]
+
+  @@index([shopId])
+}
+
+// =============================================================================
+// V2 — DELIVERIES (restock logging)
+// =============================================================================
+
+model Delivery {
+  id       String @id @default(cuid())
+  shop     Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId   String
+  supplier Supplier? @relation(fields: [supplierId], references: [id])
+  supplierId String?
+  receivedBy User   @relation(fields: [receivedById], references: [id])
+  receivedById String
+
+  // Optional: delivery was for a specific customer (e.g. milk delivery)
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  customerId String?
+
+  status    DeliveryStatus @default(DELIVERED)
+  invoiceNo String?
+  totalCost Decimal?       @db.Decimal(12, 2)
+  note      String?
+
+  deliveredAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  items          DeliveryItem[]
+  stockMovements StockMovement[]
+
+  @@index([shopId, deliveredAt])
+  @@index([supplierId])
+}
+
+model DeliveryItem {
+  id         String   @id @default(cuid())
+  delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  deliveryId String
+  product    Product  @relation(fields: [productId], references: [id])
+  productId  String
+
+  quantity     Decimal @db.Decimal(12, 3)
+  buyingPrice  Decimal @db.Decimal(12, 2) // price paid to supplier
+
+  @@index([deliveryId])
+  @@index([productId])
+}
