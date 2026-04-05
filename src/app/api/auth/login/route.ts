@@ -7,11 +7,14 @@ export async function POST(req: Request) {
     const body = await req.json();
     const data = await loginUser(body.email, body.password);
 
+    // return data without refresh token in the response body, we will set it in an HttpOnly cookie
+    const { refreshToken, ...loginData } = data;
+
     // Set HttpOnly cookie with the refresh token
     const response = NextResponse.json(
       {
         success: true,
-        data,
+        data: loginData,
         error: null,
       },
       { status: 200 },
@@ -23,6 +26,7 @@ export async function POST(req: Request) {
       sameSite: "strict",
       maxAge: 7 * 24 * 60 * 60, // 7 days
     });
+
     return response;
   } catch (error: any) {
     console.error("Login error:", error);
