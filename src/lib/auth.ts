@@ -109,7 +109,7 @@ export const loginUser = async (email: string, password: string) => {
     phone: existingUser.phone,
   };
 
-  return { accessToken, user };
+  return { accessToken, refreshToken, user };
 };
 
 export const refresh = async (refreshToken: string) => {
