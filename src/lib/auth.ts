@@ -1,6 +1,6 @@
 import prisma from "./prisma";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import { jwtVerify, SignJWT } from "jose";
 import { AppError } from "./error";
 
 interface RegisterInput {
@@ -90,17 +90,24 @@ export const loginUser = async (email: string, password: string) => {
     throw new AppError("Invalid email or password", 401);
   }
 
+  const accessSecret = new TextEncoder().encode(process.env.JWT_ACCESS_SECRET);
+  const refreshSecret = new TextEncoder().encode(
+    process.env.JWT_REFRESH_SECRET,
+  );
+
   // generate access token
-  const accessSecret = process.env.JWT_ACCESS_SECRET as string;
-  const accessToken = jwt.sign({ userId: existingUser.id }, accessSecret, {
-    expiresIn: "15m",
-  });
+  const accessToken = await new SignJWT({ userId: existingUser.id })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("15m")
+    .sign(accessSecret);
 
   // generate refresh token
-  const refreshSecret = process.env.JWT_REFRESH_SECRET as string;
-  const refreshToken = jwt.sign({ userId: existingUser.id }, refreshSecret, {
-    expiresIn: "7d",
-  });
+  const refreshToken = await new SignJWT({ userId: existingUser.id })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(refreshSecret);
 
   const user = {
     id: existingUser.id,
@@ -113,13 +120,15 @@ export const loginUser = async (email: string, password: string) => {
 };
 
 export const refresh = async (refreshToken: string) => {
-  const refreshSecret = process.env.JWT_REFRESH_SECRET as string;
-  const verify = jwt.verify(refreshToken, refreshSecret);
+  const refreshSecret = new TextEncoder().encode(
+    process.env.JWT_REFRESH_SECRET,
+  );
+  const verify = await jwtVerify(refreshToken, refreshSecret);
   if (!verify || typeof verify === "string") {
     throw new AppError("Invalid refresh token", 401);
   }
 
-  const userId = verify.userId;
+  const userId = verify.payload.userId as string;
   const existingUser = await prisma.user.findUnique({
     where: { id: userId },
   });
@@ -128,10 +137,12 @@ export const refresh = async (refreshToken: string) => {
   }
 
   // generate new access token
-  const accessSecret = process.env.JWT_ACCESS_SECRET as string;
-  const accessToken = jwt.sign({ userId: existingUser.id }, accessSecret, {
-    expiresIn: "15m",
-  });
+  const accessSecret = new TextEncoder().encode(process.env.JWT_ACCESS_SECRET);
+  const accessToken = await new SignJWT({ userId: existingUser.id })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("15m")
+    .sign(accessSecret);
 
   return { accessToken };
 };
