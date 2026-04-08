@@ -5,7 +5,7 @@ import { AppError } from "@/lib/error";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const data = await loginUser(body.email, body.password);
+    const data = await loginUser(body);
 
     // return data without refresh token in the response body, we will set it in an HttpOnly cookie
     const { refreshToken, ...loginData } = data;

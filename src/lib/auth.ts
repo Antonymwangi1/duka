@@ -2,49 +2,36 @@ import prisma from "./prisma";
 import bcrypt from "bcryptjs";
 import { jwtVerify, SignJWT } from "jose";
 import { AppError } from "./error";
+import { LoginData, LoginSchema, RegisterData, RegisterSchema } from "./validation/auth";
 
-interface RegisterInput {
-  email: string;
-  name: string;
-  phone?: string;
-  password: string;
-  shopName: string;
-  shopPhone?: string;
-  location?: string;
-}
-
-export const registerUser = async (data: RegisterInput) => {
-  const { email, name, phone, password, shopName, shopPhone, location } = data;
-
-  if (!email || !password || !shopName || !name) {
-    throw new AppError("Missing required fields", 400);
-  }
+export const registerUser = async (data: RegisterData) => {
+  const validation = RegisterSchema.parse(data);
 
   const existingUser = await prisma.user.findUnique({
-    where: { email },
+    where: { email: validation.email },
   });
   if (existingUser) {
     throw new AppError("Email already in use", 409);
   }
 
-  const hashedPassword = await bcrypt.hash(password, 12);
+  const hashedPassword = await bcrypt.hash(validation.password, 12);
 
   // Perform Transaction
   const result = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
-        email,
-        name,
-        phone,
+        email: validation.email,
+        name: validation.name,
+        phone: validation.phone,
         passwordHash: hashedPassword,
       },
     });
 
     const shop = await tx.shop.create({
       data: {
-        name: shopName,
-        phone: shopPhone,
-        location,
+        name: validation.shopName,
+        phone: validation.shopPhone,
+        location: validation.location,
       },
     });
 
@@ -69,13 +56,12 @@ export const registerUser = async (data: RegisterInput) => {
   };
 };
 
-export const loginUser = async (email: string, password: string) => {
-  if (!email || !password) {
-    throw new AppError("Missing required fields", 400);
-  }
+export const loginUser = async (data: LoginData) => {
+  const validation = LoginSchema.parse(data);
+
   // find the user by email
   const existingUser = await prisma.user.findUnique({
-    where: { email },
+    where: { email: validation.email },
   });
   if (!existingUser) {
     throw new AppError("Invalid email or password", 401);
@@ -83,7 +69,7 @@ export const loginUser = async (email: string, password: string) => {
 
   // compare password
   const comparePassword = await bcrypt.compare(
-    password,
+    validation.password,
     existingUser.passwordHash,
   );
   if (!comparePassword) {
