@@ -2,7 +2,12 @@ import prisma from "./prisma";
 import bcrypt from "bcryptjs";
 import { jwtVerify, SignJWT } from "jose";
 import { AppError } from "./error";
-import { LoginData, LoginSchema, RegisterData, RegisterSchema } from "./validation/auth";
+import {
+  LoginData,
+  LoginSchema,
+  RegisterData,
+  RegisterSchema,
+} from "./validation/auth";
 
 export const registerUser = async (data: RegisterData) => {
   const validation = RegisterSchema.parse(data);
@@ -131,4 +136,13 @@ export const refresh = async (refreshToken: string) => {
     .sign(accessSecret);
 
   return { accessToken };
+};
+
+export const authMe = async (userId: string) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true, phone: true },
+  });
+  if (!user) throw new AppError("User not found", 404);
+  return { user };
 };
