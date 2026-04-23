@@ -60,16 +60,19 @@ instance.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        // Call your refresh endpoint
         const response = await axios.post("/api/auth/refresh");
+        const { accessToken } = response.data.data;
 
-        const { accessToken } = response.data;
+        const { user, shopId, role } = useAuthStore.getState();
 
-        // Update Store
-        useAuthStore
-          .getState()
-          .setAuth(accessToken, useAuthStore.getState().user);
+        // If core state is missing, session is unrecoverable — force re-login
+        if (!user || !shopId || !role) {
+          useAuthStore.getState().clearAuth();
+          processQueue(new Error("Session expired"), null);
+          return Promise.reject(new Error("Session expired"));
+        }
 
+        useAuthStore.getState().setAuth(accessToken, user, shopId, role);
         processQueue(null, accessToken);
 
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;

@@ -37,9 +37,10 @@ export default function LoginPage() {
     setServerError(null);
     try {
       const response = await instance.post("/auth/login", data);
-      const { accessToken, user } = response.data.data;
-      setAuth(accessToken, user);
-      router.push("/dashboard");
+      console.log("Login response:", response.data.data); // Debug log
+      const { accessToken, user, shopId, role } = response.data.data;
+      setAuth(accessToken, user, shopId, role);
+      router.push("/dashboard"); // dashboard is at (dashboard)/page.tsx → route is "/dashboard"
       router.refresh();
     } catch (error: any) {
       setServerError(
