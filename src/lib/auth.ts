@@ -81,6 +81,15 @@ export const loginUser = async (data: LoginData) => {
     throw new AppError("Invalid email or password", 401);
   }
 
+  const shopUser = await prisma.shopUser.findFirst({
+    where: { userId: existingUser.id },
+    orderBy: { joinedAt: "asc" },
+    select: { shopId: true, role: true },
+  });
+  if (!shopUser) {
+    throw new AppError("User is not associated with any shop", 403);
+  }
+
   const accessSecret = new TextEncoder().encode(process.env.JWT_ACCESS_SECRET);
   const refreshSecret = new TextEncoder().encode(
     process.env.JWT_REFRESH_SECRET,
@@ -107,7 +116,7 @@ export const loginUser = async (data: LoginData) => {
     phone: existingUser.phone,
   };
 
-  return { accessToken, refreshToken, user };
+  return { accessToken, refreshToken, user, shopId: shopUser.shopId, role: shopUser.role };
 };
 
 export const refresh = async (refreshToken: string) => {
@@ -144,5 +153,13 @@ export const authMe = async (userId: string) => {
     select: { id: true, email: true, name: true, phone: true },
   });
   if (!user) throw new AppError("User not found", 404);
-  return { user };
+
+  const shopUser = await prisma.shopUser.findFirst({
+    where: { userId },
+    orderBy: { joinedAt: "asc" },
+    select: { shopId: true, role: true },
+  });
+  if (!shopUser) throw new AppError("No shop associated with this account", 403);
+
+  return { user, shopId: shopUser.shopId, role: shopUser.role };
 };

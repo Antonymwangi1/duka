@@ -46,6 +46,7 @@ export const getProducts = async (userId: string, shopId: string) => {
       unit: true,
       category: true,
       isActive: true,
+      lowStockThreshold: true,
     },
     orderBy: {
       name: "asc",

@@ -13,8 +13,6 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initAuth = async () => {
-      console.log("1. token in memory:", token);
-
       if (token) {
         setIsLoading(false);
         return;
@@ -22,7 +20,6 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
       try {
         const refreshRes = await instance.post("/auth/refresh");
-
         const accessToken = refreshRes.data.data.accessToken;
 
         const meRes = await axios.get("/api/auth/me", {
@@ -30,10 +27,11 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
           withCredentials: true,
         });
 
-        const user = meRes.data.data.user;
-        setAuth(accessToken, user);
+        // authMe now returns { user, shopId, role }
+        const { user, shopId, role } = meRes.data.data;
+        setAuth(accessToken, user, shopId, role);
         setIsLoading(false);
-      } catch (error: any) {
+      } catch {
         clearAuth();
         router.push("/login");
       }
