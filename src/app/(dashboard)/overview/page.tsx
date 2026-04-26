@@ -162,7 +162,7 @@ export default function OverviewPage() {
           `/sales?shopId=${shopId}&startDate=${startOfDay}&endDate=${endOfDay}`,
         ),
         instance.get(`/products?shopId=${shopId}`),
-        instance.get(`/reports?shopId=${shopId}&periodType=weekly`),
+        instance.get(`/reports?shopId=${shopId}&periodType=weekly&date=${format(new Date(), "yyyy-MM-dd")}`),
       ]);
 
       const errs: typeof errors = {};

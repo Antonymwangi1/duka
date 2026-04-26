@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -37,7 +37,6 @@ export default function LoginPage() {
     setServerError(null);
     try {
       const response = await instance.post("/auth/login", data);
-      console.log("Login response:", response.data.data); // Debug log
       const { accessToken, user, shopId, role } = response.data.data;
       setAuth(accessToken, user, shopId, role);
       router.push("/dashboard"); // dashboard is at (dashboard)/page.tsx → route is "/dashboard"

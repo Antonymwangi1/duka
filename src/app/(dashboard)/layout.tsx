@@ -29,7 +29,7 @@ export default function DashboardLayout({
     localStorage.setItem("theme", isDarkMode ? "light" : "dark");
   };
 
-  const segment = pathname.split("/")[2];
+  const segment = pathname.split("/")[1];
   const activeTab = segment
     ? segment.charAt(0).toUpperCase() + segment.slice(1)
     : "Overview";
