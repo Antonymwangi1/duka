@@ -13,10 +13,10 @@ import { useRouter } from "next/navigation";
 import instance from "@/lib/axios";
 
 const navItems = [
-  { name: "Overview", icon: LayoutDashboard, href: "/dashboard" },
-  { name: "Inventory", icon: Package, href: "/dashboard/inventory" },
-  { name: "POS", icon: ShoppingCart, href: "/dashboard/pos" },
-  { name: "Reports", icon: BarChart3, href: "/dashboard/reports" },
+  { name: "Overview", icon: LayoutDashboard, href: "/" },
+  { name: "Inventory", icon: Package, href: "/inventory" },
+  { name: "POS", icon: ShoppingCart, href: "/pos" },
+  { name: "Reports", icon: BarChart3, href: "/reports" },
 ];
 
 interface SidebarProps {
