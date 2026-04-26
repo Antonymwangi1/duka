@@ -127,7 +127,7 @@ export const getReport = async (
       grossProfit: totalRevenue - totalCOGS,
       totalDiscount,
       totalTransactions,
-      topProductsJson: JSON.stringify(topProductsJson),
+      topProductsJson: topProductsJson,
     },
   });
 };
