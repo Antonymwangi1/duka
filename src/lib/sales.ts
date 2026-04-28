@@ -98,7 +98,13 @@ export const createSale = async (
           })),
         },
       },
-      include: { items: true },
+      include: {
+        items: {
+          include: {
+            product: { select: { name: true } },
+          },
+        },
+      },
     });
 
     await Promise.all(
