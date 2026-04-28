@@ -16,6 +16,7 @@ import {
   Package,
   CheckCircle2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -165,19 +166,21 @@ export default function POSPage() {
 
   // ── Fetch products ──────────────────────────────────────────────────────────
 
-  useEffect(() => {
+  // Replace the useEffect fetch with a named function:
+  const fetchProducts = async () => {
     if (!shopId) return;
-    const fetch = async () => {
-      try {
-        const res = await instance.get(`/products?shopId=${shopId}`);
-        setProducts(res.data.data.products ?? []);
-      } catch {
-        setError("Failed to load products.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetch();
+    try {
+      const res = await instance.get(`/products?shopId=${shopId}`);
+      setProducts(res.data.data.products ?? []);
+    } catch {
+      setError("Failed to load products.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProducts();
   }, [shopId]);
 
   // ── Derived ─────────────────────────────────────────────────────────────────
@@ -275,6 +278,7 @@ export default function POSPage() {
 
       const res = await instance.post("/sales", payload);
       setReceipt(res.data.data);
+      await fetchProducts();
     } catch (err: any) {
       setSaleError(
         err.response?.data?.error || "Sale failed. Please try again.",

@@ -35,7 +35,6 @@ export const createSale = async (
 ) => {
   await memberShipVerification(shopId, userId);
 
-  // fetching all products for the items
   const productIds = data.items.map((item) => item.productId);
   const products = await prisma.product.findMany({
     where: {
@@ -53,7 +52,6 @@ export const createSale = async (
   const preparedItems = data.items.map((item) => {
     const product = products.find((p) => p.id === item.productId)!;
 
-    // validating if stock qty is sufficient
     if (product.stockQty.lessThan(item.quantity)) {
       throw new AppError(`Insufficient stock for ${product.name}.`, 400);
     }
@@ -74,7 +72,7 @@ export const createSale = async (
   const change = new Decimal(data.amountPaid).minus(total);
   const receiptNumber = generateReceiptNumber();
 
-  return await prisma.$transaction(async (tx) => {
+  const sale = await prisma.$transaction(async (tx) => {
     const sale = await tx.sale.create({
       data: {
         shopId,
@@ -132,6 +130,13 @@ export const createSale = async (
 
     return sale;
   });
+
+  // Invalidate report cache so next dashboard load recalculates with new sale
+  await prisma.report.deleteMany({
+    where: { shopId },
+  });
+
+  return sale;
 };
 
 export const getSales = async (
