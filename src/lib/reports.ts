@@ -59,17 +59,26 @@ export const getReport = async (
   }
 
   // 3. Cache Lookup
+  // Replace the cache lookup block:
   const cachedReport = await prisma.report.findUnique({
     where: {
-      shopId_period_periodType: {
-        shopId,
-        period: periodKey,
-        periodType: periodType,
-      },
+      shopId_period_periodType: { shopId, period: periodKey, periodType },
     },
   });
 
-  if (cachedReport) return cachedReport;
+  // Only return cache if it was generated recently (within 1 hour)
+  if (cachedReport) {
+    const ageMs = Date.now() - cachedReport.generatedAt.getTime();
+    const oneHour = 60 * 60 * 1000;
+    if (ageMs < oneHour) return cachedReport;
+
+    // Stale — delete and regenerate
+    await prisma.report.delete({
+      where: {
+        shopId_period_periodType: { shopId, period: periodKey, periodType },
+      },
+    });
+  }
 
   // 4. Calculations (Aggregate & Raw Query)
   const [salesAgg, cogsResult] = await Promise.all([
@@ -127,7 +136,7 @@ export const getReport = async (
       grossProfit: totalRevenue - totalCOGS,
       totalDiscount,
       totalTransactions,
-      topProductsJson: JSON.stringify(topProductsJson),
+      topProductsJson: topProductsJson,
     },
   });
 };

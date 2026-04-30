@@ -13,12 +13,7 @@ export async function POST(req: Request) {
     );
 
     // Clear the refresh token cookie
-    response.cookies.set("refreshToken", "", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 0, // Expire immediately
-    });
+    response.cookies.delete("refreshToken");
 
     return response;
   } catch (error: any) {

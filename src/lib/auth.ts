@@ -2,7 +2,12 @@ import prisma from "./prisma";
 import bcrypt from "bcryptjs";
 import { jwtVerify, SignJWT } from "jose";
 import { AppError } from "./error";
-import { LoginData, LoginSchema, RegisterData, RegisterSchema } from "./validation/auth";
+import {
+  LoginData,
+  LoginSchema,
+  RegisterData,
+  RegisterSchema,
+} from "./validation/auth";
 
 export const registerUser = async (data: RegisterData) => {
   const validation = RegisterSchema.parse(data);
@@ -76,6 +81,15 @@ export const loginUser = async (data: LoginData) => {
     throw new AppError("Invalid email or password", 401);
   }
 
+  const shopUser = await prisma.shopUser.findFirst({
+    where: { userId: existingUser.id },
+    orderBy: { joinedAt: "asc" },
+    select: { shopId: true, role: true },
+  });
+  if (!shopUser) {
+    throw new AppError("User is not associated with any shop", 403);
+  }
+
   const accessSecret = new TextEncoder().encode(process.env.JWT_ACCESS_SECRET);
   const refreshSecret = new TextEncoder().encode(
     process.env.JWT_REFRESH_SECRET,
@@ -102,7 +116,7 @@ export const loginUser = async (data: LoginData) => {
     phone: existingUser.phone,
   };
 
-  return { accessToken, refreshToken, user };
+  return { accessToken, refreshToken, user, shopId: shopUser.shopId, role: shopUser.role };
 };
 
 export const refresh = async (refreshToken: string) => {
@@ -131,4 +145,21 @@ export const refresh = async (refreshToken: string) => {
     .sign(accessSecret);
 
   return { accessToken };
+};
+
+export const authMe = async (userId: string) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true, phone: true },
+  });
+  if (!user) throw new AppError("User not found", 404);
+
+  const shopUser = await prisma.shopUser.findFirst({
+    where: { userId },
+    orderBy: { joinedAt: "asc" },
+    select: { shopId: true, role: true },
+  });
+  if (!shopUser) throw new AppError("No shop associated with this account", 403);
+
+  return { user, shopId: shopUser.shopId, role: shopUser.role };
 };
