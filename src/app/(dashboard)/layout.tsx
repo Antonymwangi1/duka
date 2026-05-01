@@ -36,7 +36,7 @@ export default function DashboardLayout({
 
   return (
     <ProtectedRoute>
-      <div className="flex min-h-screen">
+      <div className="flex h-screen overflow-hidden">
         <Sidebar isOpen={sidebarOpen} activeTab={activeTab} />
 
         {/* Overlay for mobile sidebar */}
@@ -47,7 +47,7 @@ export default function DashboardLayout({
           />
         )}
 
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <Topbar
             shopName="Main Branch - Nairobi"
             toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
@@ -55,7 +55,7 @@ export default function DashboardLayout({
             toggleDarkMode={toggleDarkMode}
           />
 
-          <main className="p-6 overflow-auto">{children}</main>
+          <main className="flex-1 overflow-y-auto p-6">{children}</main>
         </div>
       </div>
     </ProtectedRoute>
