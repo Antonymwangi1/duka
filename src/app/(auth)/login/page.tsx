@@ -39,7 +39,7 @@ export default function LoginPage() {
       const response = await instance.post("/auth/login", data);
       const { accessToken, user, shopId, role } = response.data.data;
       setAuth(accessToken, user, shopId, role);
-      router.push("/dashboard"); // dashboard is at (dashboard)/page.tsx → route is "/dashboard"
+      router.push("/overview"); // dashboard is at (dashboard)/page.tsx → route is "/dashboard"
       router.refresh();
     } catch (error: any) {
       setServerError(
