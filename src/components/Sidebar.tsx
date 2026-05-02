@@ -6,18 +6,12 @@ import {
   BarChart3,
   LogOut,
   Store,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useRouter } from "next/navigation";
 import instance from "@/lib/axios";
-
-const navItems = [
-  { name: "Overview", icon: LayoutDashboard, href: "/" },
-  { name: "Inventory", icon: Package, href: "/inventory" },
-  { name: "POS", icon: ShoppingCart, href: "/pos" },
-  { name: "Reports", icon: BarChart3, href: "/reports" },
-];
 
 interface SidebarProps {
   isOpen: boolean;
@@ -27,6 +21,18 @@ interface SidebarProps {
 export const Sidebar = ({ isOpen, activeTab }: SidebarProps) => {
   const user = useAuthStore((state) => state.user);
   const router = useRouter();
+
+  const role = useAuthStore((state) => state.role);
+
+  const navItems = [
+    { name: "Overview", icon: LayoutDashboard, href: "/" },
+    { name: "Inventory", icon: Package, href: "/inventory" },
+    { name: "POS", icon: ShoppingCart, href: "/pos" },
+    { name: "Reports", icon: BarChart3, href: "/reports" },
+    ...(role === "OWNER"
+      ? [{ name: "Staff", icon: Users, href: "/staff" }]
+      : []),
+  ];
 
   const clearAuth = async () => {
     await instance.post("/auth/logout");

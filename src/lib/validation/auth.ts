@@ -22,6 +22,15 @@ export const RegisterSchema = z
     message: "Passwords do not match",
   });
 
+export const CreateStaffSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Invalid email address"),
+  phone: z.string().optional(),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  role: z.enum(["CASHIER", "MANAGER"]),
+});
+
 // Automatically generate the types from the schemas!
+export type CreateStaffData = z.infer<typeof CreateStaffSchema>;
 export type LoginData = z.infer<typeof LoginSchema>;
 export type RegisterData = z.infer<typeof RegisterSchema>;
