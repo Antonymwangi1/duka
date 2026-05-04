@@ -7,6 +7,7 @@ import {
   LogOut,
   Store,
   Users,
+  Settings,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -25,13 +26,16 @@ export const Sidebar = ({ isOpen, activeTab }: SidebarProps) => {
   const role = useAuthStore((state) => state.role);
 
   const navItems = [
-    { name: "Overview", icon: LayoutDashboard, href: "/" },
+    { name: "Overview", icon: LayoutDashboard, href: "/overview" },
     { name: "Inventory", icon: Package, href: "/inventory" },
-    { name: "POS", icon: ShoppingCart, href: "/pos" },
+    { name: "Pos", icon: ShoppingCart, href: "/pos" },
     { name: "Reports", icon: BarChart3, href: "/reports" },
-    ...(role === "OWNER"
-      ? [{ name: "Staff", icon: Users, href: "/staff" }]
+    ...(role === "OWNER" || role === "MANAGER"
+      ? [
+          { name: "Staff", icon: Users, href: "/staff" },
+        ]
       : []),
+    ...(role === "OWNER" ? [{ name: "Settings", icon: Settings, href: "/settings" }] : []),
   ];
 
   const clearAuth = async () => {
@@ -94,8 +98,11 @@ export const Sidebar = ({ isOpen, activeTab }: SidebarProps) => {
 
       {/* User & Logout Section */}
       <div className="p-4 border-t border-primary-dark">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div className="h-8 w-8 rounded-full bg-primary-accent flex items-center justify-center text-sidebar font-bold">
+        <Link
+          href="/profile"
+          className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-primary-dark transition-colors"
+        >
+          <div className="h-8 w-8 rounded-full bg-primary-accent flex items-center justify-center text-sidebar font-bold shrink-0">
             {initials}
           </div>
           <div className="flex-1 overflow-hidden">
@@ -106,7 +113,7 @@ export const Sidebar = ({ isOpen, activeTab }: SidebarProps) => {
               {user?.email ?? "user@example.com"}
             </p>
           </div>
-        </div>
+        </Link>
         <button
           onClick={clearAuth}
           className="flex items-center gap-3 w-full px-4 py-3 text-sidebar-text hover:text-white hover:bg-red-500/10 rounded-xl transition-colors mt-2"

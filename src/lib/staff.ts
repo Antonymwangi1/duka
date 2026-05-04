@@ -13,8 +13,8 @@ const ownerCheck = async (shopId: string, userId: string) => {
       403,
     );
   }
-  if (membership.role !== "OWNER") {
-    throw new AppError("Unauthorized: Only owners can manage staff.", 403);
+  if (membership.role !== "OWNER" && membership.role !== "MANAGER") {
+    throw new AppError("Unauthorized: Only owners and managers can manage staff.", 403);
   }
   return membership;
 };

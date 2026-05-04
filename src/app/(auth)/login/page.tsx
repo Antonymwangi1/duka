@@ -25,6 +25,8 @@ export default function LoginPage() {
   const setAuth = useAuthStore((state) => state.setAuth);
   const [serverError, setServerError] = useState<string | null>(null);
 
+  const { setShopName } = useAuthStore();
+
   const {
     register,
     handleSubmit,
@@ -39,7 +41,14 @@ export default function LoginPage() {
       const response = await instance.post("/auth/login", data);
       const { accessToken, user, shopId, role } = response.data.data;
       setAuth(accessToken, user, shopId, role);
-      router.push("/overview"); // dashboard is at (dashboard)/page.tsx → route is "/dashboard"
+
+      // fetch shop name after login
+      const shopRes = await instance.get(`/shop?shopId=${shopId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      setShopName(shopRes.data.data.shop.name);
+
+      router.push("/overview");
       router.refresh();
     } catch (error: any) {
       setServerError(

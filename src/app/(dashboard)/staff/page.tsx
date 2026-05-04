@@ -312,7 +312,7 @@ const RemoveModal = ({
 
 export default function StaffPage() {
   const { shopId, role, user } = useAuthStore();
-  const isOwner = role === "OWNER";
+  const isOwner = role === "OWNER" || role === "MANAGER";
 
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -324,7 +324,7 @@ export default function StaffPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (role && role !== "OWNER") {
+    if (role && role !== "OWNER" && role !== "MANAGER") {
       router.replace("/overview");
     }
   }, [role]);
