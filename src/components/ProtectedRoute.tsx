@@ -7,7 +7,7 @@ import instance from "@/lib/axios";
 import axios from "axios";
 
 export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { token, setAuth, clearAuth } = useAuthStore();
+  const { token, setAuth, clearAuth, setShopName } = useAuthStore();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
 
@@ -29,7 +29,15 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
         // authMe now returns { user, shopId, role }
         const { user, shopId, role } = meRes.data.data;
+
+        // fetch shop name after session restore
+        const shopRes = await instance.get(`/shop?shopId=${shopId}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const shopName = shopRes.data.data.shop.name;
+
         setAuth(accessToken, user, shopId, role);
+        setShopName(shopName);
         setIsLoading(false);
       } catch {
         clearAuth();
