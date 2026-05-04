@@ -12,12 +12,15 @@ interface AuthState {
   user: AuthUser | null;
   shopId: string | null;
   role: string | null;
+  shopName: string | null;
   setAuth: (
     token: string,
     user: AuthUser,
     shopId: string,
     role: string,
   ) => void;
+  setShopName: (shopName: string) => void;
+  setUser: (user: AuthUser) => void;
   clearAuth: () => void;
 }
 
@@ -26,6 +29,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   shopId: null,
   role: null,
+  shopName: null,
   setAuth: (token, user, shopId, role) => set({ token, user, shopId, role }),
-  clearAuth: () => set({ token: null, user: null, shopId: null, role: null }),
+  setShopName: (shopName) => set({ shopName }),
+  setUser: (user) => set({ user }),
+  clearAuth: () =>
+    set({ token: null, user: null, shopId: null, role: null, shopName: null }),
 }));
