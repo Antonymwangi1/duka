@@ -2,7 +2,7 @@
 
 A SaaS inventory and sales tracker built for small Kenyan shops (dukas). Duka Manager gives shop owners and staff real-time visibility into stock, sales, and profit — without needing accounting knowledge.
 
-> **Current version:** v1.1.0
+> **Current version:** v1.2.0
 
 ---
 
@@ -52,6 +52,17 @@ A SaaS inventory and sales tracker built for small Kenyan shops (dukas). Duka Ma
 - Client-side search by name or SKU
 - Category filter dropdown
 - Role-based access — CASHIER gets read-only view
+- **CSV export** — downloads full inventory as a spreadsheet-ready CSV file (name, SKU, category, unit, buying price, selling price, stock qty, low stock threshold, low stock status)
+
+### Stock Adjustment
+- Accessible from the inventory table — owner and manager only
+- Three reason types:
+  - **Manual Adjustment** — set correct total stock qty after a physical count
+  - **Damage** — remove damaged or expired units from stock
+  - **Customer Return** — add returned units back into stock
+- Live stock preview before confirming — turns red if result would be negative
+- Note field saved to `StockMovement` audit trail
+- All adjustments written atomically — product update + StockMovement in one transaction
 
 ### Point of Sale (POS)
 - Searchable product grid — out-of-stock items disabled
@@ -108,51 +119,53 @@ A SaaS inventory and sales tracker built for small Kenyan shops (dukas). Duka Ma
 src/
   app/
     api/
-      auth/           # login, register, refresh, logout, me
-      products/       # CRUD + [id]
-      sales/          # create, list + [id]
-      reports/        # get/generate report
-      categories/     # list, create + [id] delete
-      staff/          # list, create + [id] delete
-      shop/           # get, update
-      profile/        # update profile + password/
+      auth/             # login, register, refresh, logout, me
+      products/         # CRUD + [id]
+      sales/            # create, list + [id]
+      reports/          # get/generate report
+      categories/       # list, create + [id] delete
+      staff/            # list, create + [id] delete
+      shop/             # get, update
+      profile/          # update profile + password/
+      stock-adjustment/ # create stock adjustment
     (auth)/
       login/
       register/
     (dashboard)/
-      overview/       # overview dashboard
-      inventory/      # product management
-      pos/            # point of sale
-      reports/        # sales reports
-      staff/          # staff management (owner only)
-      settings/       # shop settings (owner only)
-      profile/        # user profile
+      overview/         # overview dashboard
+      inventory/        # product management + CSV export
+      pos/              # point of sale
+      reports/          # sales reports
+      staff/            # staff management (owner only)
+      settings/         # shop settings (owner only)
+      profile/          # user profile
   lib/
-    prisma.ts         # Prisma client singleton
-    auth.ts           # register, login, refresh, authMe
-    inventory.ts      # product service
-    sales.ts          # sale service + report cache invalidation
-    reports.ts        # report service with caching
-    categories.ts     # category service
-    staff.ts          # staff service
-    shop.ts           # shop service
-    profile.ts        # profile + password service
-    axios.ts          # axios instance with silent refresh interceptor
-    error.ts          # AppError class
+    prisma.ts           # Prisma client singleton
+    auth.ts             # register, login, refresh, authMe
+    inventory.ts        # product service
+    sales.ts            # sale service + report cache invalidation
+    reports.ts          # report service with caching
+    categories.ts       # category service
+    staff.ts            # staff service
+    shop.ts             # shop service
+    profile.ts          # profile + password service
+    stockAdjustment.ts  # stock adjustment service
+    axios.ts            # axios instance with silent refresh interceptor
+    error.ts            # AppError class
     helpers/
-      request.ts      # apiResponse, apiError, getUserId
+      request.ts        # apiResponse, apiError, getUserId
     validation/
-      auth.ts         # login, register, createStaff schemas
-      product.ts      # product schemas
-      sale.ts         # sale schemas
-      category.ts     # category schema
+      auth.ts           # login, register, createStaff schemas
+      product.ts        # product schemas
+      sale.ts           # sale schemas
+      category.ts       # category schema
   store/
-    useAuthStore.ts   # Zustand — token, user, shopId, role, shopName
+    useAuthStore.ts     # Zustand — token, user, shopId, role, shopName
   components/
     Sidebar.tsx
     Topbar.tsx
     ProtectedRoute.tsx
-  middleware.ts       # API protection + page-level auth guard
+  middleware.ts         # API protection + page-level auth guard
 ```
 
 ---
@@ -173,8 +186,8 @@ src/
 ### Stock Management
 - `stockQty` on `Product` is a denormalized cache for fast reads
 - `StockMovement` is the append-only source of truth
-- Every stock change (sale, restock, adjustment) writes a `StockMovement` row
-- Sales deduct stock atomically in a Prisma transaction
+- Every stock change (sale, restock, adjustment, damage, return) writes a `StockMovement` row
+- Sales and adjustments deduct/update stock atomically in Prisma transactions
 
 ### Report Caching
 - Reports are pre-aggregated and stored in the `Report` table
@@ -184,7 +197,7 @@ src/
 
 ### Role-based Access
 - API: membership verification on every service call, `ownerCheck` for owner-only operations
-- CASHIER blocked from create/update/delete on products and all staff/settings endpoints
+- CASHIER blocked from create/update/delete on products, adjustments, and all staff/settings endpoints
 - UI: `role` in Zustand — restricted UI elements hidden, restricted pages redirect non-owners
 
 ---
@@ -209,6 +222,10 @@ src/
 ---
 
 ## Changelog
+
+### v1.2.0
+- Stock adjustment — manual adjustment, damage, customer return with full audit trail
+- Inventory CSV export — one-click download of full stock list
 
 ### v1.1.0
 - Staff management — owner can add/remove cashiers and managers
