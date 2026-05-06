@@ -18,7 +18,9 @@ import {
   AlertTriangle,
   ChevronDown,
   SlidersHorizontal,
+  Download,
 } from "lucide-react";
+import { format } from "date-fns";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -666,6 +668,52 @@ export default function InventoryPage() {
     });
   }, [products, search, categoryFilter]);
 
+  const handleExportCSV = () => {
+    const headers = [
+      "Name",
+      "SKU",
+      "Category",
+      "Unit",
+      "Buying Price (KES)",
+      "Selling Price (KES)",
+      "Stock Qty",
+      "Low Stock Threshold",
+      "Low Stock",
+    ];
+
+    const rows = products.map((p) => [
+      p.name,
+      p.sku ?? "",
+      p.category?.name ?? "",
+      p.unit,
+      Number(p.buyingPrice).toFixed(2),
+      Number(p.sellingPrice).toFixed(2),
+      Number(p.stockQty).toFixed(3),
+      p.lowStockThreshold ?? LOW_STOCK_FALLBACK,
+      isLowStock(p) ? "Yes" : "No",
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map((row) =>
+        row
+          .map((cell) =>
+            typeof cell === "string" && cell.includes(",")
+              ? `"${cell.replace(/"/g, '""')}"`
+              : cell,
+          )
+          .join(","),
+      )
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `inventory-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
       {(showAddModal || editTarget) && shopId && (
@@ -708,24 +756,25 @@ export default function InventoryPage() {
       )}
 
       <div className="space-y-6 max-w-7xl mx-auto">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">
-              Inventory
-            </h1>
-            <p className="text-sm text-foreground/50 mt-0.5">
-              {products.length} product{products.length !== 1 ? "s" : ""} in
-              stock
-            </p>
-          </div>
+        <div className="flex items-center gap-3">
           {canEdit && (
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark transition-colors"
-            >
-              <Plus size={16} />
-              Add Product
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleExportCSV}
+                disabled={products.length === 0}
+                className="flex items-center gap-2 rounded-xl border border-foreground/15 px-4 py-2.5 text-sm font-semibold text-foreground/60 hover:bg-foreground/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Download size={16} />
+                Export CSV
+              </button>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark transition-colors"
+              >
+                <Plus size={16} />
+                Add Product
+              </button>
+            </div>
           )}
         </div>
 
