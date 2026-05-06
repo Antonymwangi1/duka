@@ -1,4 +1,3 @@
-// src/app/(dashboard)/inventory/page.tsx
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -18,6 +17,7 @@ import {
   Package,
   AlertTriangle,
   ChevronDown,
+  SlidersHorizontal,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -43,6 +43,8 @@ interface Product {
   category: Category | null;
 }
 
+type AdjustmentReason = "ADJUSTMENT" | "DAMAGE" | "RETURN";
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const LOW_STOCK_FALLBACK = 5;
@@ -55,6 +57,27 @@ const fmt = (n: string | number) =>
 
 const isLowStock = (p: Product) =>
   Number(p.stockQty) <= (p.lowStockThreshold ?? LOW_STOCK_FALLBACK);
+
+const REASON_CONFIG: Record<
+  AdjustmentReason,
+  { label: string; description: string; color: string }
+> = {
+  ADJUSTMENT: {
+    label: "Manual Adjustment",
+    description: "Set the correct total stock quantity after a count",
+    color: "text-blue-500",
+  },
+  DAMAGE: {
+    label: "Damage",
+    description: "Remove damaged or expired units from stock",
+    color: "text-red-500",
+  },
+  RETURN: {
+    label: "Customer Return",
+    description: "Add returned units back into stock",
+    color: "text-emerald-500",
+  },
+};
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
@@ -71,7 +94,7 @@ const inputCls = (error?: boolean) =>
       : "border-foreground/15 focus:border-primary focus:ring-primary/20"
   }`;
 
-// ─── Product Form Modal ────────────────────────────────────────────────────────
+// ─── Product Form Modal ───────────────────────────────────────────────────────
 
 interface ProductModalProps {
   categories: Category[];
@@ -120,13 +143,11 @@ const ProductModal = ({
         categoryId: data.categoryId || undefined,
         imageUrl: data.imageUrl || undefined,
       };
-
       if (isEdit) {
         await instance.patch(`/products/${editTarget.id}`, payload);
       } else {
         await instance.post("/products", payload);
       }
-
       onSaved();
     } catch (err: any) {
       setServerError(err.response?.data?.error || "Something went wrong.");
@@ -136,7 +157,6 @@ const ProductModal = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-lg bg-background rounded-2xl border border-foreground/10 shadow-2xl overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-foreground/8">
           <h2 className="text-sm font-semibold text-foreground">
             {isEdit ? "Edit Product" : "Add Product"}
@@ -149,7 +169,6 @@ const ProductModal = ({
           </button>
         </div>
 
-        {/* Body */}
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
           {serverError && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -157,7 +176,6 @@ const ProductModal = ({
             </div>
           )}
 
-          {/* Name */}
           <div className="space-y-1">
             <label className="text-xs font-medium text-foreground/60">
               Product Name <span className="text-red-400">*</span>
@@ -172,7 +190,6 @@ const ProductModal = ({
             )}
           </div>
 
-          {/* SKU + Unit */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-foreground/60">
@@ -199,7 +216,6 @@ const ProductModal = ({
             </div>
           </div>
 
-          {/* Buying + Selling Price */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-foreground/60">
@@ -237,7 +253,6 @@ const ProductModal = ({
             </div>
           </div>
 
-          {/* Stock Qty + Category */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-foreground/60">
@@ -280,7 +295,6 @@ const ProductModal = ({
             </div>
           </div>
 
-          {/* Footer */}
           <div className="flex gap-3 pt-2">
             <button
               type="button"
@@ -309,7 +323,7 @@ const ProductModal = ({
   );
 };
 
-// ─── Delete Confirm Modal ──────────────────────────────────────────────────────
+// ─── Delete Modal ─────────────────────────────────────────────────────────────
 
 interface DeleteModalProps {
   product: Product;
@@ -389,6 +403,216 @@ const DeleteModal = ({
   );
 };
 
+// ─── Stock Adjustment Modal ───────────────────────────────────────────────────
+
+interface StockAdjustmentModalProps {
+  product: Product;
+  shopId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+const StockAdjustmentModal = ({
+  product,
+  shopId,
+  onClose,
+  onSaved,
+}: StockAdjustmentModalProps) => {
+  const [reason, setReason] = useState<AdjustmentReason>("ADJUSTMENT");
+  const [quantity, setQuantity] = useState<string>("");
+  const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isAbsolute = reason === "ADJUSTMENT";
+  const currentStock = Number(product.stockQty);
+
+  const preview = useMemo(() => {
+    const qty = Number(quantity);
+    if (isNaN(qty) || quantity === "") return null;
+    if (isAbsolute) return qty;
+    if (reason === "DAMAGE") return currentStock - qty;
+    return currentStock + qty;
+  }, [quantity, reason, currentStock, isAbsolute]);
+
+  const handleSubmit = async () => {
+    const qty = Number(quantity);
+    if (isNaN(qty) || quantity === "") {
+      setError("Please enter a valid quantity.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await instance.post("/stock-adjustment", {
+        shopId,
+        productId: product.id,
+        reason,
+        quantity: qty,
+        note: note || undefined,
+      });
+      onSaved();
+    } catch (err: any) {
+      setError(err.response?.data?.error || "Failed to adjust stock.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-md bg-background rounded-2xl border border-foreground/10 shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-foreground/8">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">
+              Adjust Stock
+            </h2>
+            <p className="text-xs text-foreground/50 mt-0.5">
+              {product.name} —{" "}
+              <span className="font-medium">
+                {currentStock} {product.unit} current
+              </span>
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-foreground/8 text-foreground/50 hover:text-foreground transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-foreground/60">
+              Reason
+            </label>
+            <div className="space-y-2">
+              {(
+                Object.entries(REASON_CONFIG) as [
+                  AdjustmentReason,
+                  (typeof REASON_CONFIG)[AdjustmentReason],
+                ][]
+              ).map(([key, config]) => (
+                <label
+                  key={key}
+                  className={`flex items-start gap-3 rounded-xl border px-4 py-3 cursor-pointer transition-colors ${
+                    reason === key
+                      ? "border-primary bg-primary/5"
+                      : "border-foreground/10 hover:border-foreground/20"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    value={key}
+                    checked={reason === key}
+                    onChange={() => {
+                      setReason(key);
+                      setQuantity("");
+                      setError(null);
+                    }}
+                    className="accent-primary mt-0.5"
+                  />
+                  <div>
+                    <p
+                      className={`text-sm font-medium ${
+                        reason === key ? config.color : "text-foreground"
+                      }`}
+                    >
+                      {config.label}
+                    </p>
+                    <p className="text-xs text-foreground/40 mt-0.5">
+                      {config.description}
+                    </p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-foreground/60">
+              {isAbsolute
+                ? `New Total Quantity (${product.unit})`
+                : `Quantity to ${reason === "DAMAGE" ? "Remove" : "Return"} (${product.unit})`}
+            </label>
+            <input
+              type="number"
+              min={0}
+              step="0.001"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              placeholder={isAbsolute ? `e.g. ${currentStock}` : "e.g. 5"}
+              className="w-full rounded-xl border border-foreground/15 bg-background py-2.5 px-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition"
+            />
+          </div>
+
+          {preview !== null && (
+            <div
+              className={`rounded-xl px-4 py-3 flex items-center justify-between text-sm ${
+                preview < 0
+                  ? "bg-red-50 border border-red-200"
+                  : "bg-foreground/4 border border-foreground/8"
+              }`}
+            >
+              <span className="text-foreground/60">Stock after adjustment</span>
+              <span
+                className={`font-bold ${
+                  preview < 0 ? "text-red-500" : "text-foreground"
+                }`}
+              >
+                {preview.toFixed(2)} {product.unit}
+              </span>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-foreground/60">
+              Note (optional)
+            </label>
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. Stock count on 6 May, 3 units found expired"
+              className="w-full rounded-xl border border-foreground/15 bg-background py-2.5 px-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={onClose}
+              className="flex-1 rounded-xl border border-foreground/15 py-2.5 text-sm font-medium text-foreground/60 hover:bg-foreground/5 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={
+                submitting ||
+                quantity === "" ||
+                (preview !== null && preview < 0)
+              }
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-semibold text-white hover:bg-primary-dark transition-colors disabled:opacity-60"
+            >
+              {submitting ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                "Confirm Adjustment"
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function InventoryPage() {
@@ -406,6 +630,7 @@ export default function InventoryPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
+  const [adjustTarget, setAdjustTarget] = useState<Product | null>(null); // ← inside component
 
   const fetchData = async () => {
     if (!shopId) return;
@@ -441,20 +666,8 @@ export default function InventoryPage() {
     });
   }, [products, search, categoryFilter]);
 
-  const handleSaved = () => {
-    setShowAddModal(false);
-    setEditTarget(null);
-    fetchData();
-  };
-
-  const handleDeleted = () => {
-    setDeleteTarget(null);
-    fetchData();
-  };
-
   return (
     <>
-      {/* Modals */}
       {(showAddModal || editTarget) && shopId && (
         <ProductModal
           categories={categories}
@@ -464,7 +677,11 @@ export default function InventoryPage() {
             setShowAddModal(false);
             setEditTarget(null);
           }}
-          onSaved={handleSaved}
+          onSaved={() => {
+            setShowAddModal(false);
+            setEditTarget(null);
+            fetchData();
+          }}
         />
       )}
       {deleteTarget && shopId && (
@@ -472,12 +689,25 @@ export default function InventoryPage() {
           product={deleteTarget}
           shopId={shopId}
           onClose={() => setDeleteTarget(null)}
-          onDeleted={handleDeleted}
+          onDeleted={() => {
+            setDeleteTarget(null);
+            fetchData();
+          }}
+        />
+      )}
+      {adjustTarget && shopId && (
+        <StockAdjustmentModal
+          product={adjustTarget}
+          shopId={shopId}
+          onClose={() => setAdjustTarget(null)}
+          onSaved={() => {
+            setAdjustTarget(null);
+            fetchData();
+          }}
         />
       )}
 
       <div className="space-y-6 max-w-7xl mx-auto">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground tracking-tight">
@@ -499,7 +729,6 @@ export default function InventoryPage() {
           )}
         </div>
 
-        {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search
@@ -533,7 +762,6 @@ export default function InventoryPage() {
           </div>
         </div>
 
-        {/* Table */}
         <div className="rounded-2xl border border-foreground/10 bg-background overflow-hidden">
           {loading ? (
             <div className="p-6 space-y-3">
@@ -650,6 +878,13 @@ export default function InventoryPage() {
                         {canEdit && (
                           <td className="px-6 py-4">
                             <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => setAdjustTarget(product)}
+                                className="p-1.5 rounded-lg hover:bg-foreground/8 text-foreground/40 hover:text-blue-500 transition-colors"
+                                title="Adjust stock"
+                              >
+                                <SlidersHorizontal size={14} />
+                              </button>
                               <button
                                 onClick={() => setEditTarget(product)}
                                 className="p-1.5 rounded-lg hover:bg-foreground/8 text-foreground/40 hover:text-foreground transition-colors"
